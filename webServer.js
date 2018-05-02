@@ -19,11 +19,11 @@ const app = {};
 app.routes = [];
 let _static = '.';
 // 命令集合
-const methods = ['get', 'post', 'put', 'delete', 'options', 'all'];
+const methods = ['get', 'post', 'put', 'delete', 'options', 'all', 'use'];
 // 实现路由池
 methods.forEach((method) => {
     app[method] = (path, fn) => {
-        routes.push({method, path, fn});
+        app.routes.push({method, path, fn});
     }
 });
 
@@ -33,7 +33,12 @@ const lazy = function* (arr) {
 }
 
 // 遍历路由池
+// routes 路由池
+// method 命令
+// path 请求路径
 const passRouter = (routes, method, path) => (req, res) => {
+    // 模式匹配
+    const replaceParams = (path) => new RegExp(`\^${path.replace(/:\w[^\/]+/g, '\\w[^\/]+')}\$`);
     const lazyRoutes = lazy(routes);
     (function next() {
         // 当前遍历状态
@@ -48,6 +53,20 @@ const passRouter = (routes, method, path) => (req, res) => {
         } else if ((it.method === method || it.method === 'all') && (it.path === path || it.path === "*")) {
             // 匹配到路由
             it.fn(req, res);
+        } else if (it.path.includes(':') && (it.method === method || it.method === 'all') && (replaceParams(it.path).test(path))) {
+            // 模式匹配
+            let index = 0;
+            const params2Array = it.path.split('/'); // 注册函数的path
+            const path2Array = path.split('/');// 请求路径的path
+            const params = {};
+            params2Array.forEach((path) => {
+                if (/\:/.test(path)) {
+                    params[path.slice(1)] = path2Array[index];
+                }
+                index++
+            })
+            req.params = params;
+            it.fn(req, res);
         } else {
             // 继续匹配
             next();
@@ -56,6 +75,9 @@ const passRouter = (routes, method, path) => (req, res) => {
 }
 
 // 处理静态文件函数
+// res response对象
+// pathName 静态文件相对路径
+// ext静态文件后缀
 function handleStatic(res, pathName, ext) {
     fs.exists(pathName, (exists) => {
         if (!exists) {
@@ -78,6 +100,33 @@ function handleStatic(res, pathName, ext) {
     })
 }
 
+// 目录浏览
+// dir 需要提供目录浏览功能的目录
+// dirname 本地路径 即__dirname 
+// bool 子目录是否提供浏览功能
+app.dir = function (_dir, dirname, bool) {
+    app.get(_dir, (req, res) => {
+        let html = "<head><meta charset='utf-8'></head>";
+        try {
+            // 用户访问目录
+            let files = fs.readdirSync(dirname + _dir);
+            let fileName = null;
+            for (let i in files) {
+                if (path.extname(files[i]) === "" && bool === true) {
+                    app.dir(_dir + '/' + files[i], dirname, bool)
+                }
+                fileName = files[i];
+                html += "<div><a  href='" +_dir + '/' + fileName + "'>" + fileName + "</a></div>";
+            }
+        } catch (e) {
+            html += '<h1>您访问的目录不存在</h1>';
+        }
+        res.writeHead(200, {'content-type': 'text/html'});
+        res.end(html);
+    })
+}
+
+
 app.listen = (port, host, callback) => {
     http.createServer((req, res) => {
         // 获取请求的方法
@@ -87,7 +136,7 @@ app.listen = (port, host, callback) => {
         // 获取path部分
         const pathName = urlObj.pathname
         // 获取后缀
-        const ext = path.extname(pathName).slice(1)
+        const ext = path.extname(pathName).slice(1);
         // 若有后缀 则是静态文件
         if (ext) {
             handleStatic(res, _static + pathName, ext)
@@ -100,4 +149,13 @@ app.listen = (port, host, callback) => {
     });
 };
 
+
+app.dir('/www', __dirname, true);
+app.use('/blog', (req, res, next) => {
+    console.log('%s %s', req.method, req.url);
+    next()
+})
+app.get('/blog/:id', (req, res, next) => {
+    res.end('hello ' + req.params.id)
+})
 app.listen('8100', '127.0.0.1')
