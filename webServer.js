@@ -2,6 +2,7 @@ const fs = require('fs');
 const url = require('url');
 const path = require('path');
 const http = require('http');
+const crypto = require('crypto');
 
 // 常见静态文件格式
 const mime = {
@@ -61,6 +62,7 @@ const passRouter = (routes, method, path) => (req, res) => {
             const params = {};
             params2Array.forEach((path) => {
                 if (/\:/.test(path)) {
+                    // 如果是模式匹配的路径 就加入params对象中
                     params[path.slice(1)] = path2Array[index];
                 }
                 index++
@@ -77,7 +79,7 @@ const passRouter = (routes, method, path) => (req, res) => {
 // 处理静态文件函数
 // res response对象
 // pathName 静态文件相对路径
-// ext静态文件后缀
+// ext 静态文件后缀
 function handleStatic(res, pathName, ext) {
     fs.exists(pathName, (exists) => {
         if (!exists) {
@@ -88,12 +90,20 @@ function handleStatic(res, pathName, ext) {
             fs.readFile(pathName, (err, file) => {
                 if (err) {
                     res.writeHead(500, {'Cotent-Type': 'text/plain'});
-                    res.end(err)
+                    res.end(err);
                 } else {
-                    const ContentType = mime[ext] || 'text/plain';
-                    res.writeHead(200, {'Cotent-Type': ContentType});
-                    res.write(file);
-                    res.end();
+                    // etag用于检验文件是否有变动
+                    const etag = crypto.createHash('md5').update(file).digest('hex'); // md5算法
+                    if (res.ifNoneMatch === etag) {
+                        res.writeHead(304);
+                        res.end()
+                    } else {
+                        const ContentType = mime[ext] || 'text/plain';
+                        res.setHeader('Etag', etag);
+                        res.writeHead(200, {'Cotent-Type': ContentType});
+                        res.write(file);
+                        res.end();
+                    }
                 }
             })
         }
@@ -139,6 +149,8 @@ app.listen = (port, host, callback) => {
         const ext = path.extname(pathName).slice(1);
         // 若有后缀 则是静态文件
         if (ext) {
+            // if-none-match 判断缓存是否可用
+            res.ifNoneMatch = req.headers['if-none-match'];
             handleStatic(res, _static + pathName, ext)
         } else {
             // 遍历路由池
@@ -158,4 +170,5 @@ app.use('/blog', (req, res, next) => {
 app.get('/blog/:id', (req, res, next) => {
     res.end('hello ' + req.params.id)
 })
+
 app.listen('8100', '127.0.0.1')
