@@ -3,6 +3,8 @@ const url = require('url');
 const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
+const xml2js = require('xml2js');
+const config = {};
 
 // 常见静态文件格式
 const mime = {
@@ -69,6 +71,11 @@ const passRouter = (routes, method, path) => (req, res) => {
             })
             req.params = params;
             it.fn(req, res);
+        } else if (it.method === 'get' && it.path.includes(req.url)) {
+            // 若允许访问的目录的子目录未允许访问
+            res.writeHead(403, {'content-type': 'text/plain;charset=utf-8'});
+            res.end(`暂未有访问权限`);
+            return;
         } else {
             // 继续匹配
             next();
@@ -136,7 +143,7 @@ app.dir = function (_dir, dirname, bool) {
     })
 }
 
-
+// 启动服务
 app.listen = (port, host, callback) => {
     http.createServer((req, res) => {
         // 获取请求的方法
@@ -161,8 +168,31 @@ app.listen = (port, host, callback) => {
     });
 };
 
+// 解析web.config
+app.resolve = () => {
+    let parser = new xml2js.Parser({explicitArray : false});
+    fs.readFile('./web.config', (err, file) => {
+        parser.parseString(file, (err, result) => {
+            for(let i in result.webconfig) {
+                config[i] = result.webconfig[i]
+            }
+            app.doDir();
+        })
+    })
+}
 
-app.dir('/www', __dirname, true);
+// 目录配置字符串解析并调用dir函数
+app.doDir = () => {
+    for(let i of config.resolveDir.dir) {
+        if (i.indexOf("[") === 0) {
+            i = i.substring(1, i.length - 1);
+        }
+        i = i.split(',');
+        app.dir(i[0], __dirname, i[1]);
+    }
+    app.listen(config.port, config.host);
+}
+
 app.use('/blog', (req, res, next) => {
     console.log('%s %s', req.method, req.url);
     next()
@@ -171,4 +201,6 @@ app.get('/blog/:id', (req, res, next) => {
     res.end('hello ' + req.params.id)
 })
 
-app.listen('8100', '127.0.0.1')
+app.resolve();
+
+module.exports = app
