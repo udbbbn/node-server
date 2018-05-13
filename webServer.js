@@ -54,8 +54,22 @@ const passRouter = (routes, method, path) => (req, res) => {
             // 匹配到中间件
             it.fn(req, res, next);
         } else if ((it.method === method || it.method === 'all') && (it.path === path || it.path === "*")) {
-            // 匹配到路由
-            it.fn(req, res);
+            if (it.method === "get") {
+                // 获取query数据 获取get请求参数
+                req.query = url.parse(req.url, true).query;
+                // 匹配到路由
+                it.fn(req, res);
+            } else if (it.method === "post") {
+                // 获取body数据 获取post请求参数
+                let info = '';
+                req.addListener('data', (chunk) => {
+                    info += chunk
+                }).addListener('end', () => {
+                    req.body = JSON.parse(info);
+                    // 匹配到路由
+                    it.fn(req, res);
+                })
+            }
         } else if (it.path.includes(':') && (it.method === method || it.method === 'all') && (replaceParams(it.path).test(path))) {
             // 模式匹配
             let index = 0;
@@ -183,7 +197,16 @@ app.resolve = () => {
 
 // 目录配置字符串解析并调用dir函数
 app.doDir = () => {
-    for(let i of config.resolveDir.dir) {
+    if (Array.isArray(config.resolveDir.dir)) {
+        for(let i of config.resolveDir.dir) {
+            if (i.indexOf("[") === 0) {
+                i = i.substring(1, i.length - 1);
+            }
+            i = i.split(',');
+            app.dir(i[0], __dirname, i[1]);
+        }
+    } else {
+        let i = config.resolveDir.dir;
         if (i.indexOf("[") === 0) {
             i = i.substring(1, i.length - 1);
         }
@@ -192,14 +215,6 @@ app.doDir = () => {
     }
     app.listen(config.port, config.host);
 }
-
-app.use('/blog', (req, res, next) => {
-    console.log('%s %s', req.method, req.url);
-    next()
-})
-app.get('/blog/:id', (req, res, next) => {
-    res.end('hello ' + req.params.id)
-})
 
 app.resolve();
 
