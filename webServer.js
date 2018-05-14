@@ -85,7 +85,7 @@ const passRouter = (routes, method, path) => (req, res) => {
             })
             req.params = params;
             it.fn(req, res);
-        } else if (it.method === 'get' && it.path.includes(req.url)) {
+        } else if (it.method === 'get' && it.path.includes(req.url) && it.path === '/') {
             // 若允许访问的目录的子目录未允许访问
             res.writeHead(403, {'content-type': 'text/plain;charset=utf-8'});
             res.end(`暂未有访问权限`);
@@ -147,6 +147,13 @@ app.dir = function (_dir, dirname, bool) {
                     app.dir(_dir + '/' + files[i], dirname, bool)
                 }
                 fileName = files[i];
+                // 根目录
+                if ((_dir === '/' || _dir === '') && !config['DirectoryIndex']) {
+                    _dir = '';
+                } else {
+                    handleStatic(res, config['DirectoryIndex'], config['DirectoryIndex'].split('.')[1])
+                    return
+                }
                 html += "<div><a  href='" +_dir + '/' + fileName + "'>" + fileName + "</a></div>";
             }
         } catch (e) {
