@@ -143,14 +143,14 @@ app.dir = function (_dir, dirname, bool) {
             let files = fs.readdirSync(dirname + _dir);
             let fileName = null;
             for (let i in files) {
-                if (path.extname(files[i]) === "" && bool === true) {
+                if (path.extname(files[i]) === "" && bool === " true") {
                     app.dir(_dir + '/' + files[i], dirname, bool)
                 }
                 fileName = files[i];
                 // 根目录
                 if ((_dir === '/' || _dir === '') && !config['DirectoryIndex']) {
                     _dir = '';
-                } else {
+                } else if ((_dir === '/' || _dir === '') && config['DirectoryIndex']){
                     handleStatic(res, config['DirectoryIndex'], config['DirectoryIndex'].split('.')[1])
                     return
                 }
